@@ -1,0 +1,43 @@
+FloatLayout:
+    Label:
+        text: 'KlappyBirds!'
+        font_size: '28sp'
+
+    Label:
+        pos_hint: {'x': 0, 'top': 1}
+        size_hint: None, None
+        size: self.texture_size
+        text: 'Score: {:.0f}\nHighscore: {:.0f}'.format(app.bird.score if app.bird else 0, app.highscore)
+        font_size: '22sp'
+
+
+<Bird>:
+    center: 128, self.parent.height / 2. if self.parent else 0
+    size_hint: None, None
+    size: [dp(32) for wh in 'wh']
+
+    canvas:
+        Color:
+        SmoothLine:
+            ellipse: self.pos + self.size
+        Color:
+            a: .25
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+
+<Pipe>:
+    size_hint_x: None
+    highlight: False
+
+    canvas:
+        Color:
+            rgba: (1, 0, 0, 1) if self.highlight else (1, 1, 1, 1)
+        Rectangle:
+            pos: self.x, self.top_pipe_height
+            size: self.width, self.height - self.top_pipe_height
+
+        Rectangle:
+            pos: self.pos
+            size: self.width, self.bottom_pipe_height
