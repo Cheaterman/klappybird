@@ -4,24 +4,29 @@ import random
 
 
 class NeuralNetwork:
-    def __init__(self, inputs, hidden, outputs, coefs=None):
+    def __init__(self, inputs, hidden, outputs, weights=None, bias=None):
         self.inputs = inputs
         self.hidden = hidden
         self.outputs = outputs
         self._mlp = MLPRegressor(
-            activation='tanh',
             solver='lbfgs',
-            hidden_layer_sizes=hidden
+            hidden_layer_sizes=hidden,
         ).fit(
             [[0 for _ in range(inputs)]],
             [0] if outputs == 1 else [[0 for _ in range(outputs)]]
         )
-        if coefs is not None:
-            self._mlp.coefs_ = coefs
+        if weights is not None:
+            self._mlp.coefs_ = weights
+        if bias is not None:
+            self._mlp.intercepts_ = bias
 
     def copy(self):
         return NeuralNetwork(
-            self.inputs, self.hidden, self.outputs, list(self._mlp.coefs_)
+            self.inputs,
+            self.hidden,
+            self.outputs,
+            [matrix.copy() for matrix in self._mlp.coefs_],
+            [matrix.copy() for matrix in self._mlp.intercepts_],
         )
 
     def predict(self, inputs):
@@ -31,12 +36,20 @@ class NeuralNetwork:
         for matrix in self._mlp.coefs_:
             for line in matrix:
                 for index, value in enumerate(line[:]):
-                    if random.random() > rate:
-                        continue
-                    line[index] = random.random() * 2 - 1
+                    line[index] = self.do_mutate(line[index], rate)
+
+        for line in self._mlp.intercepts_:
+            for index, value in enumerate(line[:]):
+                line[index] = self.do_mutate(line[index], rate)
+
+    def do_mutate(self, value, rate):
+        if random.random() > rate:
+            return value
+        else:
+            return value + random.gauss(0, 1) * .5
 
     def crossover(self, network):
-        coefs = []
+        weights = []
         for m_index, matrix in enumerate(self._mlp.coefs_):
             new_matrix = []
 
@@ -47,9 +60,21 @@ class NeuralNetwork:
                 for v_index, value in enumerate(line):
                     new_line.append(
                         value if random.random() < .5 else
-                        network.coefs_[m_index][l_index][v_index]
+                        network._mlp.coefs_[m_index][l_index][v_index]
                     )
 
-            coefs.append(np.array(new_matrix))
+            weights.append(np.array(new_matrix))
 
-        return NeuralNetwork(self.inputs, self.hidden, self.outputs, coefs)
+        bias = []
+        for l_index, line in enumerate(self._mlp.intercepts_):
+            new_line = []
+
+            for v_index, value in enumerate(line):
+                new_line.append(
+                    value if random.random() < .5 else
+                    network._mlp.intercepts_[l_index][v_index]
+                )
+
+            bias.append(np.array(new_line))
+
+        return NeuralNetwork(self.inputs, self.hidden, self.outputs, weights, bias)

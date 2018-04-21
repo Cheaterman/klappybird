@@ -22,7 +22,8 @@ class KlappyBirds(App):
 
     def build(self):
         self.reset()
-        Clock.schedule_interval(self.update, 0)
+        #Clock.schedule_interval(self.update, 0)
+        Clock.schedule_interval(lambda _: self.update_quick(10), 0)
 
     def reset(self):
         for pipe in self.pipes[:]:
@@ -66,9 +67,13 @@ class KlappyBirds(App):
 
         for brain in brains:
             bird = Bird(brain)
-            bird.brain.mutate(.01)
+            bird.brain.mutate(.1)
             self.birds.append(bird)
             self.root.add_widget(bird)
+
+    def update_quick(self, speed, *args):
+        for _ in range(speed):
+            self.update()
 
     def update(self, *args):
         if not self.birds:
@@ -78,6 +83,8 @@ class KlappyBirds(App):
         closest_pipe = None
 
         for pipe in self.pipes[:]:
+            pipe.update()
+
             if pipe.right < 0:
                 self.pipes.remove(pipe)
                 self.root.remove_widget(pipe)
@@ -104,9 +111,9 @@ class KlappyBirds(App):
                         bird.score > self.dead_birds[-1].score
                     ):
                         if not self.birds:
-                            bird.score *= 10
+                            bird.score *= 4
                         elif len(self.birds) < 2:
-                            bird.score *= 5
+                            bird.score *= 2
                     self.dead_birds.append(bird)
                     self.root.remove_widget(bird)
                     break
@@ -141,11 +148,11 @@ class Bird(Widget):
 
     def think(self, closest_pipe):
         inputs = [
-            self.y / self.parent.height,
+            (self.y / self.parent.height) * 2 - 1,
             self.velocity / self.parent.height,
-            closest_pipe.x / self.parent.width,
-            closest_pipe.top_pipe_height / self.parent.height,
-            closest_pipe.bottom_pipe_height / self.parent.height,
+            (closest_pipe.x / self.parent.width) * 2 - 1,
+            (closest_pipe.top_pipe_height / self.parent.height) * 2 - 1,
+            (closest_pipe.bottom_pipe_height / self.parent.height) * 2 - 1,
         ]
         output = self.brain.predict(inputs)[0]
         if output > 0:
@@ -175,10 +182,6 @@ class Pipe(Widget):
     spacing_ratio = NumericProperty(.25)
     spacing = NumericProperty(1)
     speed = NumericProperty(5)
-
-    def __init__(self, **kwargs):
-        super(Pipe, self).__init__(**kwargs)
-        Clock.schedule_interval(self.update, 0)
 
     def on_size(self, pipe, size):
         height = size[1]
