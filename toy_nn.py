@@ -5,15 +5,23 @@ import random
 
 class NeuralNetwork:
     def __init__(self, inputs, hidden, outputs, coefs=None):
-        self._mlp = MLPRegressor(hidden_layer_sizes=(hidden,)).fit(
-            [[0 for _ in range(inputs)]], [0 for _ in range(outputs)]
+        self.inputs = inputs
+        self.hidden = hidden
+        self.outputs = outputs
+        self._mlp = MLPRegressor(
+            activation='tanh',
+            solver='lbfgs',
+            hidden_layer_sizes=hidden
+        ).fit(
+            [[0 for _ in range(inputs)]],
+            [0] if outputs == 1 else [[0 for _ in range(outputs)]]
         )
         if coefs is not None:
             self._mlp.coefs_ = coefs
 
     def copy(self):
         return NeuralNetwork(
-            self.inputs, self.hidden, self.outputs, self._mlp.coefs_
+            self.inputs, self.hidden, self.outputs, list(self._mlp.coefs_)
         )
 
     def predict(self, inputs):

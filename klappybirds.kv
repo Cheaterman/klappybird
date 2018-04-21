@@ -7,7 +7,7 @@ FloatLayout:
         pos_hint: {'x': 0, 'top': 1}
         size_hint: None, None
         size: self.texture_size
-        text: 'Score: {:.0f}\nHighscore: {:.0f}'.format(app.bird.score if app.bird else 0, app.highscore)
+        text: 'Score: {:.0f}\nHighscore: {:.0f}'.format(app.score, app.highscore)
         font_size: '22sp'
 
 
@@ -18,7 +18,7 @@ FloatLayout:
 
     canvas:
         Color:
-        SmoothLine:
+        Line:
             ellipse: self.pos + self.size
         Color:
             a: .25
@@ -29,11 +29,9 @@ FloatLayout:
 
 <Pipe>:
     size_hint_x: None
-    highlight: False
 
     canvas:
         Color:
-            rgba: (1, 0, 0, 1) if self.highlight else (1, 1, 1, 1)
         Rectangle:
             pos: self.x, self.top_pipe_height
             size: self.width, self.height - self.top_pipe_height
