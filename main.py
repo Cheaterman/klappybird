@@ -1,12 +1,17 @@
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.properties import (
+    BooleanProperty,
     ListProperty,
     NumericProperty,
     ObjectProperty,
+    StringProperty,
 )
 from kivy.uix.widget import Widget
 from toy_nn import NeuralNetwork
+import datetime
+import json
+import os
 import random
 
 
@@ -18,27 +23,44 @@ class KlappyBirds(App):
     dead_birds = ListProperty()
     pipes = ListProperty()
     score = NumericProperty()
+    generations = NumericProperty()
     highscore = NumericProperty()
+    update_speed = NumericProperty(1)
+    update_limit = NumericProperty()
+    limit_speed = BooleanProperty()
+    start_time = ObjectProperty()
+    time_since_start = StringProperty()
+    best_brain = ObjectProperty()
+    mode = StringProperty('train')
 
     def build(self):
+        self.game_area = self.root.ids.game_area
         self.reset()
-        #Clock.schedule_interval(self.update, 0)
-        Clock.schedule_interval(lambda _: self.update_quick(10), 0)
+        Clock.schedule_interval(self.update_quick, 0)
+        self.start_time = datetime.datetime.now()
 
     def reset(self):
         for pipe in self.pipes[:]:
             self.pipes.remove(pipe)
-            self.root.remove_widget(pipe)
+            self.game_area.remove_widget(pipe)
 
         for bird in self.birds[:]:
             self.birds.remove(bird)
-            self.root.remove_widget(bird)
+            self.game_area.remove_widget(bird)
 
-        if not self.dead_birds:
-            for _ in range(POOL_SIZE):
+        if self.mode == 'best' and self.best_brain:
+            bird = Bird(self.best_brain)
+            self.birds.append(bird)
+            self.game_area.add_widget(bird)
+        elif not self.dead_birds:
+            if self.best_brain:  # Add at least one best bird
+                bird = Bird(self.best_brain)
+                self.birds.append(bird)
+                self.game_area.add_widget(bird)
+            for _ in range(POOL_SIZE - len(self.birds)):
                 bird = Bird()
                 self.birds.append(bird)
-                self.root.add_widget(bird)
+                self.game_area.add_widget(bird)
         else:
             self.new_generation()
 
@@ -46,9 +68,13 @@ class KlappyBirds(App):
         self.frame_count = 0
 
     def calculate_fitness(self):
-        total_score = sum([bird.score for bird in self.dead_birds])
+        scores = [bird.score for bird in self.dead_birds]
+        max_score = max(scores)
+        if max_score >= self.highscore:
+            self.best_brain = self.dead_birds[scores.index(max_score)].brain
+        total_score = sum([score ** 2 for score in scores])
         for bird in self.dead_birds:
-            bird.fitness = bird.score / total_score
+            bird.fitness = bird.score ** 2 / total_score
 
     def new_generation(self):
         self.calculate_fitness()
@@ -69,16 +95,28 @@ class KlappyBirds(App):
             bird = Bird(brain)
             bird.brain.mutate(.1)
             self.birds.append(bird)
-            self.root.add_widget(bird)
+            self.game_area.add_widget(bird)
 
-    def update_quick(self, speed, *args):
-        for _ in range(speed):
+        self.generations += 1
+
+    def update_quick(self, *args):
+        for speed in range(int(self.update_speed)):
             self.update()
+            if self.limit_speed and Clock.time() - Clock.get_time() >= 1 / 15.:
+                self.update_limit = speed
+                break
+        else:
+            self.update_limit = 0
+
+        timedelta = datetime.datetime.now() - self.start_time
+        hours, rest = divmod(timedelta.seconds, 3600)
+        minutes, seconds = divmod(rest, 60)
+        self.time_since_start = '{}{:02d}:{:02d}:{:02d}.{:02d}'.format(
+            '' if not timedelta.days else '{}d '.format(timedelta.days),
+            hours, minutes, seconds, timedelta.microseconds // 10 ** 4,
+        )
 
     def update(self, *args):
-        if not self.birds:
-            self.reset()
-
         birds_x = self.birds[0].x  # All birds have same x
         closest_pipe = None
 
@@ -87,7 +125,7 @@ class KlappyBirds(App):
 
             if pipe.right < 0:
                 self.pipes.remove(pipe)
-                self.root.remove_widget(pipe)
+                self.game_area.remove_widget(pipe)
                 continue
 
             if pipe.x + pipe.width < birds_x:
@@ -97,38 +135,50 @@ class KlappyBirds(App):
                 break
 
         for bird in self.birds[:]:
+            for pipe in self.pipes:
+                if pipe.collide_widget(bird):
+                    self.birds.remove(bird)
+                    self.dead_birds.append(bird)
+                    self.game_area.remove_widget(bird)
+                    bird.score = self.score
+                    dead = True
+                    break
+            else:
+                dead = False
+            if dead:
+                continue
+
             bird.update()
 
             if closest_pipe is not None:
                 bird.think(closest_pipe)
 
-            for pipe in self.pipes:
-                if pipe.collide_widget(bird):
-                    Clock.unschedule(bird.update)
-                    self.birds.remove(bird)
-                    if(
-                        self.dead_birds and
-                        bird.score > self.dead_birds[-1].score
-                    ):
-                        if not self.birds:
-                            bird.score *= 4
-                        elif len(self.birds) < 2:
-                            bird.score *= 2
-                    self.dead_birds.append(bird)
-                    self.root.remove_widget(bird)
-                    break
-            else:
-                if bird.score > self.score:
-                    self.score = bird.score
-                if bird.score > self.highscore:
-                    self.highscore = bird.score
+        if not self.birds:
+            self.reset()
+
+        self.score += .1
+
+        if self.score > self.highscore:
+            self.highscore = self.score
 
         if self.frame_count % 100 == 0:
-            pipe = Pipe(x=self.root.width)
+            pipe = Pipe(x=self.game_area.width)
             self.pipes.append(pipe)
-            self.root.add_widget(pipe)
+            self.game_area.add_widget(pipe)
 
         self.frame_count += 1
+
+    def serialize_best(self):
+        if not self.best_brain:
+            return
+        with open('best_bird.json', 'w') as json_file:
+            json_file.write(self.best_brain.serialize())
+
+    def deserialize_best(self):
+        if not os.path.exists('best_bird.json'):
+            return
+        with open('best_bird.json') as json_file:
+            self.best_brain = NeuralNetwork.deserialize(json.load(json_file))
 
 
 class Bird(Widget):
@@ -136,7 +186,6 @@ class Bird(Widget):
     velocity = NumericProperty(0)
     lift = NumericProperty(25)
     drag = NumericProperty(.05)
-    score = NumericProperty()
 
     def __init__(self, brain=None, **kwargs):
         super(Bird, self).__init__(**kwargs)
@@ -162,8 +211,6 @@ class Bird(Widget):
         self.velocity += self.lift
 
     def update(self, *args):
-        self.score += .1
-
         self.velocity -= self.gravity
         self.velocity *= 1 - self.drag
         self.y += self.velocity
@@ -183,8 +230,10 @@ class Pipe(Widget):
     spacing = NumericProperty(1)
     speed = NumericProperty(5)
 
-    def on_size(self, pipe, size):
-        height = size[1]
+    def on_parent(self, pipe, parent):
+        if not parent:
+            return
+        height = self.parent.height
         self.spacing = spacing = height * self.spacing_ratio
         self.top_pipe_height = (
             height - random.random() * (height - spacing)

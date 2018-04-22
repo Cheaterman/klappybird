@@ -1,4 +1,7 @@
 FloatLayout:
+    FloatLayout:
+        id: game_area
+
     Label:
         text: 'KlappyBirds!'
         font_size: '28sp'
@@ -7,8 +10,59 @@ FloatLayout:
         pos_hint: {'x': 0, 'top': 1}
         size_hint: None, None
         size: self.texture_size
-        text: 'Score: {:.0f}\nHighscore: {:.0f}'.format(app.score, app.highscore)
+        format_text: 'Score: {:.0f}\nBirds alive: {}\nHighscore: {:.0f}\nGenerations passed: {}\nTime since start: {}'
+        text: self.format_text.format(app.score, len(app.birds), app.highscore, app.generations, app.time_since_start)
         font_size: '22sp'
+        padding: sp(10), sp(10)
+
+        canvas.before:
+            Color:
+                rgba: 0, 0, 0, .5
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+    BoxLayout:
+        pos_hint: {'right': 1, 'top': 1}
+        size_hint: .3, .1
+
+        CheckBox:
+            size_hint_x: None
+            width: sp(32)
+            active: app.limit_speed
+            on_active: app.limit_speed = self.active
+
+        Label:
+            size_hint_x: .35
+            text: '{:.1f}x{}'.format(app.update_speed, '' if not app.update_limit else '\n[color=#ff0000]({:.1f}x)'.format(app.update_limit))
+            markup: True
+
+        Slider:
+            min: 0
+            max: 3
+            on_value: app.update_speed = 10 ** self.value
+
+    BoxLayout:
+        pos_hint: {'right': 1, 'y': 0}
+        size_hint: .5, .1
+
+        ToggleButton:
+            text: 'Play best bird'
+            state: 'down' if app.mode == 'best' else 'normal'
+            on_state:
+                app.mode = 'best' if self.state == 'down' else 'train'
+                app.reset()
+
+        Button:
+            text: 'Save best bird'
+            on_press: app.serialize_best()
+
+        Button:
+            text: 'Load best bird'
+            on_press:
+                app.deserialize_best()
+                app.mode = 'best'
+                app.reset()
 
 
 <Bird>:

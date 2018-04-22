@@ -1,4 +1,5 @@
 from sklearn.neural_network import MLPRegressor
+import json
 import numpy as np
 import random
 
@@ -46,7 +47,7 @@ class NeuralNetwork:
         if random.random() > rate:
             return value
         else:
-            return value + random.gauss(0, 1) * .5
+            return min(1, max(-1, value + random.gauss(0, .1) * .5))
 
     def crossover(self, network):
         weights = []
@@ -58,10 +59,10 @@ class NeuralNetwork:
                 new_matrix.append(new_line)
 
                 for v_index, value in enumerate(line):
-                    new_line.append(
-                        value if random.random() < .5 else
+                    new_line.append(self.do_crossover(
+                        value,
                         network._mlp.coefs_[m_index][l_index][v_index]
-                    )
+                    ))
 
             weights.append(np.array(new_matrix))
 
@@ -70,11 +71,39 @@ class NeuralNetwork:
             new_line = []
 
             for v_index, value in enumerate(line):
-                new_line.append(
-                    value if random.random() < .5 else
+                new_line.append(self.do_crossover(
+                    value,
                     network._mlp.intercepts_[l_index][v_index]
-                )
+                ))
 
             bias.append(np.array(new_line))
 
         return NeuralNetwork(self.inputs, self.hidden, self.outputs, weights, bias)
+
+    def do_crossover(self, value_a, value_b):
+        return value_a if random.random() < .5 else value_b
+
+    def serialize(self):
+        return json.dumps(dict(
+            inputs=self.inputs,
+            hidden=self.hidden,
+            outputs=self.outputs,
+            weights=[
+                matrix.tolist()
+                for matrix in self._mlp.coefs_
+            ],
+            bias=[
+                line.tolist()
+                for line in self._mlp.intercepts_
+            ],
+        ))
+
+    @staticmethod
+    def deserialize(json):
+        return NeuralNetwork(
+            json['inputs'],
+            json['hidden'],
+            json['outputs'],
+            [np.array(matrix) for matrix in json['weights']],
+            [np.array(matrix) for matrix in json['bias']],
+        )
