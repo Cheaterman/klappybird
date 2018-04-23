@@ -10,6 +10,7 @@ class NeuralNetwork:
         self.hidden = hidden
         self.outputs = outputs
         self._mlp = MLPRegressor(
+            activation='logistic',
             solver='lbfgs',
             hidden_layer_sizes=hidden,
         ).fit(
@@ -47,7 +48,7 @@ class NeuralNetwork:
         if random.random() > rate:
             return value
         else:
-            return min(1, max(-1, value + random.gauss(0, .1) * .5))
+            return value + random.gauss(0, .05)
 
     def crossover(self, network):
         weights = []

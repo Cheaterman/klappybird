@@ -16,6 +16,7 @@ import random
 
 
 POOL_SIZE = 100
+PIPE_SPAWN_INITIAL_SPEED = 150
 
 
 class KlappyBirds(App):
@@ -35,9 +36,10 @@ class KlappyBirds(App):
 
     def build(self):
         self.game_area = self.root.ids.game_area
-        self.reset()
         Clock.schedule_interval(self.update_quick, 0)
         self.start_time = datetime.datetime.now()
+        self.pipe_spawn_speed = 0
+        self.reset()
 
     def reset(self):
         for pipe in self.pipes[:]:
@@ -66,6 +68,9 @@ class KlappyBirds(App):
 
         self.score = 0
         self.frame_count = 0
+        self.pipe_spawn_time = 0
+        if self.pipe_spawn_speed:
+            self.pipe_spawn_speed /= 2
 
     def calculate_fitness(self):
         scores = [bird.score for bird in self.dead_birds]
@@ -83,7 +88,7 @@ class KlappyBirds(App):
         self.dead_birds = []
         brains = []
 
-        for i in range(POOL_SIZE):
+        for _ in range(POOL_SIZE):
             selected = -1
             selector = random.random()
             while selector > 0:
@@ -93,7 +98,7 @@ class KlappyBirds(App):
 
         for brain in brains:
             bird = Bird(brain)
-            bird.brain.mutate(.1)
+            bird.brain.mutate(.01)
             self.birds.append(bird)
             self.game_area.add_widget(bird)
 
@@ -128,6 +133,7 @@ class KlappyBirds(App):
                 self.game_area.remove_widget(pipe)
                 continue
 
+        for pipe in self.pipes[:]:
             if pipe.x + pipe.width < birds_x:
                 continue
             else:
@@ -135,12 +141,13 @@ class KlappyBirds(App):
                 break
 
         for bird in self.birds[:]:
+            if bird.center_y < 0:
+                self.kill(bird)
+                continue
+
             for pipe in self.pipes:
                 if pipe.collide_widget(bird):
-                    self.birds.remove(bird)
-                    self.dead_birds.append(bird)
-                    self.game_area.remove_widget(bird)
-                    bird.score = self.score
+                    self.kill(bird)
                     dead = True
                     break
             else:
@@ -161,12 +168,26 @@ class KlappyBirds(App):
         if self.score > self.highscore:
             self.highscore = self.score
 
-        if self.frame_count % 100 == 0:
-            pipe = Pipe(x=self.game_area.width)
+        if int(self.score * 10) % 1000 == 0:
+            self.pipe_spawn_speed += 5
+
+        self.pipe_spawn_time -= 1
+
+        if self.pipe_spawn_time <= 0:
+            pipe = Pipe(x=self.game_area.right)
             self.pipes.append(pipe)
             self.game_area.add_widget(pipe)
+            self.pipe_spawn_time = (
+                PIPE_SPAWN_INITIAL_SPEED - self.pipe_spawn_speed
+            )
 
         self.frame_count += 1
+
+    def kill(self, bird):
+        self.birds.remove(bird)
+        self.dead_birds.append(bird)
+        self.game_area.remove_widget(bird)
+        bird.score = self.score
 
     def serialize_best(self):
         if not self.best_brain:
@@ -196,12 +217,13 @@ class Bird(Widget):
         self.fitness = 0
 
     def think(self, closest_pipe):
+        parent = self.parent
         inputs = [
-            (self.y / self.parent.height) * 2 - 1,
-            self.velocity / self.parent.height,
-            (closest_pipe.x / self.parent.width) * 2 - 1,
-            (closest_pipe.top_pipe_height / self.parent.height) * 2 - 1,
-            (closest_pipe.bottom_pipe_height / self.parent.height) * 2 - 1,
+            (self.y / parent.height) - .5,
+            self.velocity / self.lift / 10,
+            (closest_pipe.x / parent.width),
+            (closest_pipe.top_pipe_height / parent.height) * 2 - 1,
+            (closest_pipe.bottom_pipe_height / parent.height) * 2 - 1,
         ]
         output = self.brain.predict(inputs)[0]
         if output > 0:
@@ -214,13 +236,6 @@ class Bird(Widget):
         self.velocity -= self.gravity
         self.velocity *= 1 - self.drag
         self.y += self.velocity
-
-        if self.center_y < 0:
-            self.center_y = 0
-            self.velocity = 0
-
-        if self.center_y > self.parent.height:
-            self.center_y = self.parent.height
 
 
 class Pipe(Widget):
